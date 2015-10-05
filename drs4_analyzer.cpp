@@ -1,5 +1,5 @@
 /*
-   Name:           read_binary.cpp
+   Name:           drs4_analyzer, based on read_binary.
    Created by:     Stefan Ritt <stefan.ritt@psi.ch>
    Date:           July 30th, 2014
 
@@ -7,7 +7,7 @@
  
    Compile and run it with:
  
-      gcc -o read_binary read_binary.cpp -lm
+      gcc drs4_analyzer.cpp mfilter.cpp -o drs4_analyzer -lm
  
       ./read_binary <filename>
 
@@ -18,7 +18,8 @@
 
    $Id: read_binary.cpp 21495 2014-09-26 14:20:49Z ritt $
    
-   2015-10-01 Version 2 by Andrei Sukhanov
+   2015-10-01 Version 2 by Andrei Sukhanov <sukhanov@bnl.gov>
+   FAST_CALIBRATION: Makes it possible to apply the calibration ~100 times faster by storing not the cell widths but cell times.
 */
 #include <stdio.h>
 void usage()
@@ -26,11 +27,11 @@ void usage()
   printf("proc_drs file.drs options\n\n");
   printf("Process binary files saved by DRSOsc\n\n");
   printf("OPTIONS:\n");
-  printf("  -n   negative pulse processing\n");
+  printf("  -nN  negative pulse processing of channel N\n");
   printf("  -c   disable timing calibration\n");
   printf("  -tV  set LED threshold to V {0.0:1.0]\n");
-  printf("  -eV  process V events\n");
-  printf("  -vV  verbosity level\n");
+  printf("  -eN  process V events\n");
+  printf("  -vN  verbosity level\n");
 }
 
 #include <fcntl.h>
@@ -39,9 +40,9 @@ void usage()
 #include <math.h>
 #include <stdlib.h>
 
-//#define FAST_CALIBRATION
+#define FAST_CALIBRATION
 
-#define MATCH_FILTERING
+//#define MATCH_FILTERING
 #ifdef MATCH_FILTERING
   int mfilter_create(const double *amplitude, int length);
   int mfilter_filter(double *amplitude, int length, double *peak_amplitude, double *peak_position);
@@ -82,7 +83,7 @@ int main(int argc, char **argv)
    double waveform[4][1024], time[4][1024];
    float bin_width[4][1024];
    int i, j, ch, nEv, chn_index,ii;
-   double t1, t2, dt;
+   double t1, t2, tt[2], dt;
    char filename[256];
    
    int ndt;
@@ -91,7 +92,8 @@ int main(int argc, char **argv)
    double sumdt, sumdt2;
    
    int opt;
-   double negative_pulse=0.;
+   double invert[4];
+   for(ii=0;ii<4;ii++) invert[ii]=0.;
    int verb=0;
    int nEvents=1000000;
    double wmax[4];
@@ -100,12 +102,12 @@ int main(int argc, char **argv)
    int timing_calibration = 1;
    double sum_widths[4];
    
-   while ((opt = getopt (argc, argv, "ncv:t:e:")) != -1)
+   while ((opt = getopt (argc, argv, "n:cv:t:e:")) != -1)
      switch (opt)
      {
        case 'n':
-         negative_pulse = 1.;
-         printf("Negative pulse processing\n");
+         invert[atoi(optarg)] = 1.;
+         printf("Negative pulse processing of ch %i\n",atoi(optarg));
          break;
        case 'v':
          verb = atoi(optarg);
@@ -131,6 +133,9 @@ int main(int argc, char **argv)
      }
 
    if(threshold == default_threshold) printf("Using default threshold=%f\n",threshold);
+#ifdef FAST_CALIBRATION
+   printf("Using fast calibration\n");
+#endif
      
    if(argc==optind) {usage();return 1;}
 
@@ -163,8 +168,8 @@ int main(int argc, char **argv)
       printf("Found timing calibration for channel #%d, sum_widths=%f\n", i+1, sum_widths[ch]);
       if(timing_calibration==0) for (ii=0; ii<1024; ii++) bin_width[ch][ii] = 0.2;
 #ifdef FAST_CALIBRATION
-      for (ii=2; ii<1024-1; ii++) bin_width[ch][ii] += bin_width[ch][ii-1];
-      for (ii=1023; ii>0; ii--) bin_width[ch][ii] = bin_width[ch][ii-1];
+      for (ii=1; ii<1024-1; ii++) bin_width[ch][ii] += bin_width[ch][ii-1];
+      for (ii=1024-1; ii>0; ii--) bin_width[ch][ii] = bin_width[ch][ii-1];
       bin_width[ch][0] = 0.;
 #endif
       if(verb&8) {for(ii=0;ii<1024;ii++) printf("%i:%03i ",ii,int(bin_width[i][ii]*1000.)); printf("\n");}
@@ -199,15 +204,14 @@ int main(int argc, char **argv)
 
          for (i=0 ; i<1024 ; i++) {
             // convert data to volts
-            waveform[chn_index][i] = (voltage[i] / 65536. * (1.-2.*negative_pulse) + negative_pulse + eh.range/1000.0 - 0.5);
+            waveform[chn_index][i] = (voltage[i] / 65536. * (1.-2.*invert[ch]) + invert[ch] + eh.range/1000.0 - 0.5);
             if(waveform[chn_index][i]>wmax[ch]) {wmax[ch]=waveform[chn_index][i]; cmax[ch]=i;}
             if (verb&2) printf("%i:%03i ",i,int(waveform[chn_index][i]*1000.));            
             // calculate time for this cell
 #ifdef FAST_CALIBRATION
             time[chn_index][i] = bin_width[chn_index][(i+eh.trigger_cell) % 1024] 
               - bin_width[chn_index][eh.trigger_cell];
-            //if (time[chn_index][i] <0.) time[chn_index][i] += bin_width[chn_index][1024-1];
-	    if (time[chn_index][i] <0.) time[chn_index][i] += sum_widths[ch];
+            if (time[chn_index][i] <0.) time[chn_index][i] += sum_widths[ch];
 # else
             for (j=0,time[chn_index][i]=0 ; j<i ; j++)
                time[chn_index][i] += bin_width[chn_index][(j+eh.trigger_cell) % 1024];
@@ -225,32 +229,27 @@ int main(int argc, char **argv)
       for (ch=1 ; ch<4 ; ch++) {
          t2 = time[ch][(1024-eh.trigger_cell) % 1024];
          dt = t1 - t2;
-	 if (verb&8) printf("ch%i dt=%f\n",ch,dt);
-         //&RA ?//for (i=0 ; i<1024 ; i++) time[ch][i] += dt;
+         if (verb&8) printf("ch%i dt=%f\n",ch,dt);
+         for (i=0 ; i<1024 ; i++) time[ch][i] += dt;
       }
       
-      t1 = t2 = 0;
+      tt[0] = tt[1] = 0.;
       //threshold = 0.3;
       
-      // find peak in channel 1 above threshold
+      // find peak in channels above threshold
       if (verb&4) printf("Looking for threshold=%f crossing, trigcell %i\n",
 	threshold,eh.trigger_cell);
-      for (i=0 ; i<1022 ; i++)
-          if (waveform[0][i] < threshold && waveform[0][i+1] >= threshold) {
-            t1 = (threshold-waveform[0][i])/(waveform[0][i+1]-waveform[0][i])*(time[0][i+1]-time[0][i])+time[0][i];
-            if (verb&4) printf("Cross0: %f @ %i,%f,%f t1=%f\n", 
-	      waveform[0][i], i, time[0][i], time[0][i+1], t1);
-            break;
-         }
-      
-      // find peak in channel 2 above threshold
-      for (i=0 ; i<1022 ; i++)
-         if (waveform[1][i] < threshold && waveform[1][i+1] >= threshold) {
-            t2 = (threshold-waveform[1][i])/(waveform[1][i+1]-waveform[1][i])*(time[1][i+1]-time[1][i])+time[1][i];
-            if (verb&4) printf("Cross0: %f @ %i,%f,%f t2=%f\n", 
-	      waveform[1][i], i, time[1][i], time[1][i+1], t2);
-            break;
-         }
+      for (ch=0;ch<2;ch++)
+      {
+        for (i=0 ; i<1022 ; i++)
+            if (waveform[ch][i] < threshold && waveform[ch][i+1] >= threshold) 
+            {
+              tt[ch] = (threshold-waveform[ch][i])/(waveform[ch][i+1]-waveform[ch][i])*(time[ch][i+1]-time[ch][i])+time[ch][i];
+              if (verb&4) printf("Cross[%i]: %f,%f @ %i,%f,%f t=%f\n", 
+                ch, waveform[ch][i], waveform[ch][i+1], i, time[ch][i], time[ch][i+1], tt[ch]);
+              break;
+            }
+      }
 
       // estimate amplitudes of first two channels by averaging around peak
       int half_top_width=2;
@@ -264,12 +263,12 @@ int main(int argc, char **argv)
         asigma[ch] += wmax[ch]*wmax[ch];
       }
       
-      if(verb&1 || (nEv%1000)==999) printf("Event #%d, t2-t1=%f, A0=%f, A1=%f\n", eh.event_serial_number, t2-t1,wmax[0],wmax[1]);
+      if(verb&1 || (nEv%1000)==999) printf("Event #%d, t2-t1=%f, A0=%f, A1=%f\n", eh.event_serial_number, tt[1]-tt[0],wmax[0],wmax[1]);
             
       // calculate distance of peaks with statistics
-      if (t1 > 0 && t2 > 0) {
+      if (tt[0] > 0 && tt[1] > 0) {
          ndt++;
-         dt = t2 - t1;
+         dt = tt[1] - tt[0];
          sumdt += dt;
          sumdt2 += dt*dt;
       }
