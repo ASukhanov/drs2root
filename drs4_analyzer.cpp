@@ -7,9 +7,8 @@
  
    Compile and run it with:
  
-      gcc drs4_analyzer.cpp mfilter.cpp -o drs4_analyzer -lm
- 
-      ./read_binary <filename>
+      gcc drs4_analyzer.cpp mfilter.cpp -o drs4_analyzer -lm 
+      ./drs4_analyzer <filename> <options>
 
    This program assumes that a pulse from a signal generator is split
    and fed into channels #1 and #2. It then calculates the time difference
@@ -24,7 +23,7 @@
 #include <stdio.h>
 void usage()
 {
-  printf("proc_drs file.drs options\n\n");
+  printf("Usage: drs4_analyzer file.drs options\n\n");
   printf("Process binary files saved by DRSOsc\n\n");
   printf("OPTIONS:\n");
   printf("  -nN  negative pulse processing of channel N\n");
@@ -177,6 +176,7 @@ int main(int argc, char **argv)
          usage();
          return 1;
      }
+   if(argc==optind) {usage();return 1;}
 
    if(threshold == default_threshold) printf("Using default threshold=%f\n",threshold);
 #ifdef FAST_CALIBRATION
@@ -185,8 +185,6 @@ int main(int argc, char **argv)
     if(baseline_npoints>1) 
       printf("Baseline subtraction for %i points starting at %i\n",baseline_npoints,bl_first);
      
-   if(argc==optind) {usage();return 1;}
-
    // open the binary waveform file
    strcpy(filename, argv[optind]);
    FILE *f = fopen(filename, "r");
@@ -194,7 +192,6 @@ int main(int argc, char **argv)
       printf("Cannot find file \'%s\'\n", filename);
       return 0;
    }
-
    // read time header
    fread(&th, sizeof(th), 1, f);
    printf("Found data for board #%d\n", th.board_serial_number);
@@ -222,7 +219,6 @@ int main(int argc, char **argv)
 #endif
       if(gverb&8) {for(ii=0;ii<1024;ii++) printf("%i:%03i ",ii,int(bin_width[i][ii]*1000.)); printf("\n");}
    }
-   
    // initialize statistics
    ndt = 0;
    sumdt = sumdt2 = 0;
