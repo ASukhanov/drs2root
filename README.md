@@ -5,17 +5,22 @@ drs4_analyzer
   Process binary files saved by DRSOsc program.
   The drs4_analyzer is much fatster than the read_binary.
   
+  Features:
+    Fast calibration,
+    Baseline subtraction,
+    FIR filtering.
+
   Usage: drs4_analyzer file.drs options
-  
+
   OPTIONS:
-    -nN  negative pulse processing of channel N
-    -c   disable timing calibration
-    -tV  set LED threshold to V {0.0:1.0]
-    -fSN enable FIR filtering, S is filter shape (a:first event, r:rectangular, t:triangle), N is filter length
-    -bN  N-point baseline subtraction (N>1), single cell noise is calculated when N>0
-    -r   regularization of cell intervals (make it equidistant), not yet commissioned
-    -eN  process V events
-    -vN  verbosity level
+    -nN  negative pulse processing of channel N.
+    -c   disable timing calibration.
+    -tV  set LED threshold to V {0.0:1.0].
+    -fSN enable FIR filtering, S is filter shape (a:first event, r:rectangular, t:triangle), N is filter length.
+    -bN  N-point baseline subtraction (N>1), single cell noise is calculated when N>0.
+    -r   regularization of cell intervals (make it equidistant), not yet commissioned.
+    -eN  process V events.
+    -vN  verbosity level.
 
   Compile it:
        gcc drs4_analyzer.cpp mfilter.cpp -o drs4_analyzer -lm
