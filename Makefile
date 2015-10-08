@@ -1,9 +1,9 @@
 # Author: A. Sukhanov, 09/30/2015
 include Makefile.arch
 #------------------------------------------------------------------------------
-dqO         = drs2root.$(ObjSuf) drs2rootDict.$(ObjSuf)
-dqS         = drs2root.$(SrcSuf) drs2rootDict.$(SrcSuf)
-dqSO        = drs2root.$(DllSuf)
+dqO         = drs4root.$(ObjSuf) drs4rootDict.$(ObjSuf)
+dqS         = drs4root.$(SrcSuf) drs4rootDict.$(SrcSuf)
+dqSO        = drs4root.$(DllSuf)
 
 OBJS          = $(dqO)
 PROGRAMS      = $(dqSO)
@@ -12,7 +12,7 @@ PROGRAMS      = $(dqSO)
 
 all:            $(PROGRAMS)
 
-drs2root:           $(dqSO)
+drs4root:           $(dqSO)
 $(dqSO):       $(dqO)
 		$(LD) $(SOFLAGS) $(LDFLAGS) $^ $(EXPLLINKLIBS) $(OutPutOpt)$@
 		@echo "$@ done"
@@ -32,8 +32,8 @@ distclean:      clean
 
 ###
 
-drs2root.$(ObjSuf): drs2root.h
-drs2rootDict.$(SrcSuf): drs2root.h
+drs4root.$(ObjSuf): drs4root.h
+drs4rootDict.$(SrcSuf): drs4root.h
 	@echo "Generating dictionary $@..."
 	@rootcint -f $@ -c $^
 

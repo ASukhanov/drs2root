@@ -25,5 +25,5 @@ drs4_analyzer
   Compile it:
        gcc drs4_analyzer.cpp mfilter.cpp -o drs4_analyzer -lm
 
-drs2root: Simple ROOT analysis of binary data from DRS4 eval board.
+drs4root: Simple ROOT analysis of binary data from DRS4 eval board.
 
