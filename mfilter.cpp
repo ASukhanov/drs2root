@@ -19,8 +19,8 @@ int mfilter_create(const double *amplitude, const int size, const int type, cons
 {
   int ii;
   double max=0;
-  int imax,ifleft=0,ifright=0;
-  double v,l2=0.;
+  int imax=0,ifleft=0,ifright=0;
+  double l2=0.;
   
   //init
   gmf_coeff = (double*) malloc(sizeof(double)*fsize);
@@ -51,6 +51,9 @@ int mfilter_create(const double *amplitude, const int size, const int type, cons
       for(ii=0;ii<gmf_size/2;ii++) gmf_coeff[ii]=double(ii+1);
       for(ii=0;ii<=gmf_size/2;ii++) gmf_coeff[gmf_size/2+ii]=double(gmf_size/2-ii+1.);
       break;
+    default:
+      gmf_size = 0;
+      return gmf_size;
   }
   
   // L2-norm
@@ -82,6 +85,7 @@ int mfilter_filter(const double *input, const int size, double *out, double *pea
     printf("output:\n"); for(ii=0;ii<size;ii++) printf("%i:%f ",ii,gmf_out[ii]); printf("\n");
   }
   for(ii=0;ii<size;ii++) out[ii] = gmf_out[ii];
+  return 0;
 }
 
 int mfilter_delete()

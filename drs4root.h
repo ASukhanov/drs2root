@@ -3,11 +3,14 @@
 
 #include <TFile.h>
 
-//#define FILTERING
+#define FILTERING
 #define FAST_CALIBRATION
 
 enum
 {
+#ifdef FILTERING
+  kMaxFilterLength = 100,
+#endif
   kNCh = 2, //number of channels recorded in the file
   kLCh = 1024,
   kMax = 65536, // max amplitude
@@ -57,7 +60,6 @@ struct Time_header_t
 class drs4root : public TFile
 {
 private:  
-  void EventMinMax();
   int ndt;
   double sumdt, sumdt2;
   double sum_widths[kNCh];
@@ -66,25 +68,28 @@ private:
   double asum[kNCh], asum2[kNCh];
   double bl_sum[kNCh], bl_sum2[kNCh];
   double waveform[kNCh][kLCh], ftime[kNCh][kLCh];
+  long firstev_pos;
+  //
+  void EventMinMax();
+  void Init();
   
 public:
   struct Event_t fEv;
 
   struct Time_header_t fth;
 
-    FILE    *fD;
-    TFile   *ffile;
-    Int_t   fsize;
-    Char_t  fname[256];
-    ULong_t fpos;
-    Int_t   fevcount;
-    UInt_t  fevnum;
-    UInt_t  fMin[kNCh], fMinPos[kNCh];
-    UInt_t  fMax[kNCh], fMaxPos[kNCh];
+  FILE    *fD;
+  TFile   *ffile;
+  Int_t   fsize;
+  Char_t  fname[256];
+  ULong_t fpos;
+  Int_t   fevcount;
+  UInt_t  fMin[kNCh], fMinPos[kNCh];
+  UInt_t  fMax[kNCh], fMaxPos[kNCh];
 
-   //unsigned short voltage[kLCh];
-   //double waveform[kNCh][kLCh], time[kNCh][kLCh];
-   //float bin_width[kNCh][kLCh];
+  //unsigned short voltage[kLCh];
+  //double waveform[kNCh][kLCh], time[kNCh][kLCh];
+  //float bin_width[kNCh][kLCh];
    
   static double threshold;
   static double invert[kNCh];
@@ -95,17 +100,19 @@ public:
   static int nEvents;
   static int gverb;
 #ifdef FILTERING
-   int mf_shape=0, mf_size=0;
-   double *mfilter_coeff=0;
-   double peak[kNCh],peakpos[kNCh];
+  static int mf_shape, mf_size;
+  double *mfilter_coeff;
+  double peak[kNCh],peakpos[kNCh];
 #endif
 
   //drs4root();
   drs4root(const Char_t *in="", const Char_t *out="");
   ~drs4root();
 
-  Int_t Find_event(Int_t ev);
+  Int_t Skip_events(Int_t ev);
   Int_t Next_event();
+  void Print_stat();
+  //void First_event(); //obsolete, just reuse init.C
   void Print_header();
   void Print_event();
   ClassDef(drs4root,0)

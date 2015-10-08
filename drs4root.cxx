@@ -22,6 +22,13 @@ double drs4root::threshold = 0.2;
 int drs4root::gverb = 0;
 int drs4root::nEvents = 100000;
 double drs4root::invert[kNCh] = {0.,0.};
+#ifdef FILTERING
+#include "mfilter.h"
+int drs4root::mf_shape=0;
+int drs4root::mf_size=0;
+#endif
+
+int gverb = drs4root::gverb;
 
 char gcobuf[256];
 char* strnz(const char* source, size_t num)
@@ -34,8 +41,21 @@ double sigma(int nn, double sum, double sum2)
 void printstat(const char *s, int nn, double sum, double sum2, double factor, const char *unit)
 {  printf("%s%.1f+-%.1f %s", s, factor*sum/double(nn), factor*sigma(nn,sum,sum2), unit);}
 
-//drs4root::drs4root()
-//{}
+void drs4root::Print_stat()
+{
+  // print statistics
+  printf("ev#%5i,",fevcount);
+  printstat(" dT=",ndt,sumdt,sumdt2,1000.,"ps"); 
+  printstat(", A0=",fevcount,asum[0],asum2[0],1000.,"mV");
+  printstat(", A1=",fevcount,asum[1],asum2[1],1000.,"mV");
+  if(baseline_npoints > 0)
+  {
+    printstat(", BL0=",fevcount,bl_sum[0],bl_sum2[0],1000.,"mV");
+    printstat(", BL1=",fevcount,bl_sum[1],bl_sum2[1],1000.,"mV");
+  }
+  printf("\n");
+}
+
 drs4root::~drs4root()
 {}
 
@@ -46,10 +66,8 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
     struct stat statv;
     Char_t      oname[256];
 
-  if((tname = gSystem->ExpandPathName(in))!=0)
-  {
-    strcpy(fname,tname);
-  }
+  if(strlen(in)==0) return;
+  if((tname = gSystem->ExpandPathName(in))!=0) strcpy(fname,tname);
   printf("Opening %s\n",fname);
   fD = fopen(fname,"rb");
   if(fD==NULL)
@@ -87,8 +105,11 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   printf("Threshold=%f\n",threshold);
   printf("Verbosity=%i\n",gverb);
   printf("Number of events to process: %i\n",nEvents);
+  if(baseline_npoints>1) 
+    printf("Baseline subtraction for %i points starting at %i\n",baseline_npoints,bl_first);
 #ifdef FILTERING
-  printf("Filtering of type %i[%i] enabled\n",mf_shape,mf_size);
+  if(mf_size > kMaxFilterLength) mf_size = kMaxFilterLength;
+  if(mf_size && mf_shape) printf("Filtering of type %i[%i] enabled\n",mf_shape,mf_size);
 #endif 
   if(regularize) printf("Cell Regularization is on!\n");
   
@@ -123,9 +144,24 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
 #endif
     if(gverb&8) {for(ii=0;ii<kLCh;ii++) printf("%i:%03i ",ii,int(fth.ch[ch].t[ii]*1000.)); printf("\n");}
   }
+  //firstev_pos = ftell(fD);
+  Init();
+  return;
+}
+
+Int_t drs4root::Skip_events(Int_t ev)
+{
+  fpos = sizeof(fth) + ev*sizeof(fEv);
+  fseek(fD,fpos,SEEK_CUR);
+  return 0;
+}
+void drs4root::Init()
+{
   // initialize statistics
+  int ch;
+  fevcount = 0;
   ndt = 0;
-  sumdt = sumdt2 = 0;
+  sumdt = sumdt2 = 0.;
   for(ch=0;ch<kNCh;ch++) 
   {
     wmax[ch]=0.; 
@@ -134,15 +170,13 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
     bl_sum[ch]=0.; 
     bl_sum2[ch]=0.;
   }
-  return;
+#ifdef FILTERING
+  mfilter_coeff = 0;
+  for(ch=0;ch<kNCh;ch++) {peak[kNCh]=0.; peakpos[kNCh]=0.;};
+#endif
 }
 
-Int_t drs4root::Find_event(Int_t ev)
-{
-  fpos = sizeof(fth) + ev*sizeof(fEv);
-  fseek(fD,fpos,SEEK_SET);
-  return 0;
-}
+//void drs4root::First_event() { fseek(fD,firstev_pos,SEEK_SET); }
 
 void drs4root::EventMinMax()
 {
@@ -166,9 +200,6 @@ Int_t drs4root::Next_event()
 {
   int ii,ch;
   double t1, t2, tt[kNCh], dt, dv, v; 
-#ifdef FILTERING
-  double l2;
-#endif
   
   if (fread(&fEv,sizeof(fEv),1,fD) != 1)
     {return 1;}
@@ -177,33 +208,36 @@ Int_t drs4root::Next_event()
 
   fevcount++;
   for(ch=0;ch<kNCh;ch++)
-  for (ii=0 ; ii<1024 ; ii++) {
-    // convert data to volts
-    waveform[ch][ii] = (fEv.ch[ch].a[ii] / 65536. * (1.-2.*invert[ch]) + invert[ch] + fEv.h.range/1000.0 - 0.5);
-    if(waveform[ch][ii]>wmax[ch]) {wmax[ch]=waveform[ch][ii]; cmax[ch]=ii;}
-    if (gverb&2) printf("%i:%03i ",ii,int(waveform[ch][ii]*1000.));            
-    // calculate time for this cell
-#ifdef FAST_CALIBRATION
-    ftime[ch][ii] = fth.ch[ch].t[(ii+fEv.h.tno) % 1024] 
-      - fth.ch[ch].t[fEv.h.tno];
-    if (ftime[ch][ii] <0.) ftime[ch][ii] += sum_widths[ch];
-# else
-    for (j=0,ftime[ch][ii]=0 ; j<ii ; j++)
-        ftime[ch][ii] += fth.ch[ch].t[(j+fEv.h.tno) % 1024];
-#endif
-    if (gverb&8) printf("%03i ",int(ftime[ch][ii]*1000.)); 
+  {
+    if (gverb&(2|8)) printf("ch%i trig cell %i timecal=%f\n",ch,fEv.h.tno,fth.ch[ch].t[fEv.h.tno]);
+    for (ii=0 ; ii<1024 ; ii++) {
+      // convert data to volts
+      waveform[ch][ii] = (fEv.ch[ch].a[ii] / 65536. * (1.-2.*invert[ch]) + invert[ch] + fEv.h.range/1000.0 - 0.5);
+      if(waveform[ch][ii]>wmax[ch]) {wmax[ch]=waveform[ch][ii]; cmax[ch]=ii;}
+      if (gverb&2) printf("%i:%03i ",ii,int(waveform[ch][ii]*1000.));            
+      // calculate time for this cell
+  #ifdef FAST_CALIBRATION
+      ftime[ch][ii] = fth.ch[ch].t[(ii+fEv.h.tno) % 1024] 
+        - fth.ch[ch].t[fEv.h.tno];
+      if (ftime[ch][ii] <0.) ftime[ch][ii] += sum_widths[ch];
+  # else
+      int jj;
+      for (jj=0,ftime[ch][ii]=0 ; jj<ii ; jj++)
+          ftime[ch][ii] += fth.ch[ch].t[(jj+fEv.h.tno) % 1024];
+  #endif
+      if (gverb&8) printf("%03i ",int(ftime[ch][ii]*1000.)); 
+    }
+    if (gverb&(2|8)) printf("\nch%i, max %f @ %i\n",ch,wmax[ch],cmax[ch]);
   }
-  if (gverb&(2|8)) printf("\n");
   
 #ifdef FILTERING
   // use the first channel of first event to build the arbitrary matching filter
-  if (mf_shape && nEv==0) 
+  if (fevcount==1) 
   {
     mf_size=mfilter_create(waveform[0],kLCh,mf_shape,mf_size,&mfilter_coeff);
-    //if(gverb&0x10) 
-      printf("MFilter of type %i[%i] created:\n",mf_shape,mf_size);
-    //if(gverb&0x20) 
+    if(mf_size)
     {
+      printf("MFilter of type %i[%i] created:\n",mf_shape,mf_size);
       double l2=0.;
       for(ii=0;ii<mf_size;ii++) 
       {
@@ -218,11 +252,11 @@ Int_t drs4root::Next_event()
   }
 #endif
   // align cell #0 of all channels
-  t1 = fth.ch[0].t[(kLCh-fEv.h.tno) % kLCh];
+  t1 = ftime[0][(kLCh-fEv.h.tno) % kLCh];
   for (ch=1 ; ch<kNCh ; ch++) {
       t2 = ftime[ch][(kLCh-fEv.h.tno) % kLCh];
       dt = t1 - t2;
-      if (gverb&8) printf("ch%i dt=%f\n",ch,dt);
+      if (gverb&8) printf("ch%i trig@%i, %f-%f, aligned for %f\n",ch,fEv.h.tno,t1,t2,dt);
       for (ii=0 ; ii<kLCh ; ii++) ftime[ch][ii] += dt;
   }
   // baseline subtraction
@@ -252,7 +286,8 @@ Int_t drs4root::Next_event()
   }            
 #ifdef FILTERING
   // FIR filtering
-  if (mf_shape)
+  //printf("mf_size=%i\n",mf_size);
+  if (mf_size && mf_shape)
   for(ch=0;ch<2;ch++)
   {
     //in-place filter
@@ -303,20 +338,8 @@ Int_t drs4root::Next_event()
       sumdt += dt;
       sumdt2 += dt*dt;
   }
-      // print statistics
-      if(gverb&1 || (fevcount%1000)==999)
-      {
-        printf("ev#%5i,",fevcount+1);
-        printstat(" dT=",fevcount+1,sumdt,sumdt2,1000.,"ps"); 
-        printstat(", A0=",fevcount+1,asum[0],asum2[0],1000.,"mV");
-        printstat(", A1=",fevcount+1,asum[1],asum2[1],1000.,"mV");
-        if(baseline_npoints > 0)
-        {
-          printstat(", BL0=",fevcount+1,bl_sum[0],bl_sum2[0],1000.,"mV");
-          printstat(", BL1=",fevcount+1,bl_sum[1],bl_sum2[1],1000.,"mV");
-        }
-        printf("\n");
-      }
+  if((fevcount%1000)==999)
+    Print_stat();
   return 0;
 }
 void drs4root::Print_header()
@@ -342,6 +365,7 @@ void drs4root::Print_event()
 {
   Int_t ii,jj;
   struct Ch_Amplitude_t* ch;
+  //Print_stat();
   for(ii=0;ii<kNCh;ii++)
   {
     ch = &fEv.ch[ii];

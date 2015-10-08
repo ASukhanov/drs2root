@@ -1,7 +1,7 @@
 # Author: A. Sukhanov, 09/30/2015
 include Makefile.arch
 #------------------------------------------------------------------------------
-dqO         = drs4root.$(ObjSuf) drs4rootDict.$(ObjSuf)
+dqO         = drs4root.$(ObjSuf) drs4rootDict.$(ObjSuf) mfilter.$(ObjSuf)
 dqS         = drs4root.$(SrcSuf) drs4rootDict.$(SrcSuf)
 dqSO        = drs4root.$(DllSuf)
 
