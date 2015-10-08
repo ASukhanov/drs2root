@@ -20,8 +20,8 @@ int drs4root::timing_calibration = 1;
 int drs4root::regularize = 0;
 double drs4root::threshold = 0.2;
 int drs4root::gverb = 0;
-int drs4root::nEvents = 100000;
-double drs4root::invert[kNCh] = {0.,0.};
+double drs4root::invert[kNCh] = {1.,1.};
+int drs4root::ghist = 0;
 #ifdef FILTERING
 #include "mfilter.h"
 int drs4root::mf_shape=0;
@@ -104,7 +104,6 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   }
   printf("Threshold=%f\n",threshold);
   printf("Verbosity=%i\n",gverb);
-  printf("Number of events to process: %i\n",nEvents);
   if(baseline_npoints>1) 
     printf("Baseline subtraction for %i points starting at %i\n",baseline_npoints,bl_first);
 #ifdef FILTERING
@@ -171,9 +170,26 @@ void drs4root::Init()
     bl_sum2[ch]=0.;
   }
 #ifdef FILTERING
+  mfilter_delete(); // to free the allocated memory
   mfilter_coeff = 0;
   for(ch=0;ch<kNCh;ch++) {peak[kNCh]=0.; peakpos[kNCh]=0.;};
 #endif
+  if(ghist)
+  {
+    TString hname;
+    //TString htitle;
+    for(ch=0;ch<kNCh;ch++)
+    {
+      hname = "hch"; hname += ch;
+      cout<<"Creating hist d4r->fhch["<<ch<<"]"<<endl;
+      fhch[ch] = new TH2S(hname,hname,kLCh*2,0,200.,4000,-0.1,2.);
+      //fhch[ch]->Print();
+      hname = "hpos"; hname += ch;
+      fhpos[ch] = new TH1S(hname,hname,1000,0.,100.);
+    }
+    fhdt = new TH1S("hdt","dT using FIR",2000,-10.,10.);
+    fhdled = new TH1S("hdled","dT using Leading Edge Discriminator",2000,-10.,10.);
+  }
 }
 
 //void drs4root::First_event() { fseek(fD,firstev_pos,SEEK_SET); }
@@ -231,7 +247,7 @@ Int_t drs4root::Next_event()
   }
   
 #ifdef FILTERING
-  // use the first channel of first event to build the arbitrary matching filter
+  // use the first channel of first event to build the arbitr1.ary matching filter
   if (fevcount==1) 
   {
     mf_size=mfilter_create(waveform[0],kLCh,mf_shape,mf_size,&mfilter_coeff);
@@ -293,11 +309,25 @@ Int_t drs4root::Next_event()
     //in-place filter
     mfilter_filter(waveform[ch],kLCh,waveform[ch],&(peak[ch]),&(peakpos[ch]));
     //recalculate max
-    for(ii=0;ii<kLCh;ii++)
+    for(ii=0;ii<kLCh-mf_size;ii++)
       if(waveform[ch][ii]>wmax[ch]) {wmax[ch]=waveform[ch][ii]; cmax[ch]=ii;}
     if(gverb&0x40){for(ii=0;ii<kLCh;ii++) printf("%i,%.2f:%.4f ",ii,ftime[ch][ii],waveform[ch][ii]);  printf("\nmax=%f @ %i\n",wmax[ch],cmax[ch]);}
+    // calculate peak position using 3-point quadratic approximation
+    double dymaxl, dymaxr, dx;
+    dymaxl = waveform[ch][cmax[ch]] - waveform[ch][cmax[ch]-1];
+    dymaxr = waveform[ch][cmax[ch]+1] - waveform[ch][cmax[ch]];
+    dx = ftime[ch][cmax[ch]] - ftime[ch][ii-1];
+    if(dymaxl-dymaxr == 0.) {cout<<"Computational error!\n";}
+    fpeak_pos[ch] = dymaxl/(dymaxl-dymaxr)/dx + double(ftime[ch][cmax[ch]]); // TODO add the filter width
+    if(gverb&0x200) 
+      printf("ch%i: %.3f,%.3f-%.3f,%.3f-%.3f,%.3f, pos=%4f\n",ch,
+             waveform[ch][cmax[ch]-1],ftime[ch][cmax[ch]-1],
+             waveform[ch][cmax[ch]],ftime[ch][cmax[ch]],
+             waveform[ch][cmax[ch]+1],ftime[ch][cmax[ch]+1],fpeak_pos[ch]);
   }
-#endif        
+  if(gverb&0x200) printf("dt=%f\n",fpeak_pos[1] - fpeak_pos[0]);
+#endif
+
   // calculate single cell noise
   if(baseline_npoints > 0)
     for (ch=0;ch<2;ch++)
@@ -337,6 +367,22 @@ Int_t drs4root::Next_event()
       dt = tt[1] - tt[0];
       sumdt += dt;
       sumdt2 += dt*dt;
+  }
+  // histogram amplitudes
+  if(ghist)
+  {
+    for (ch=0;ch<kNCh;ch++)
+    {
+      //printf("filling %i\n", ch);
+      if(fhch[ch]) 
+      {
+        fhch[ch]->FillN(kLCh,ftime[ch],waveform[ch],(double* )NULL);
+        //for(ii=0;ii<kLCh;ii++) fhch[ch]->Fill(ftime[ch][ii],waveform[ch][ii]);
+      }
+      fhpos[ch]->Fill(fpeak_pos[ch]);
+    }
+    fhdt->Fill(fpeak_pos[1]-fpeak_pos[0]);
+    fhdled->Fill(dt);
   }
   if((fevcount%1000)==999)
     Print_stat();

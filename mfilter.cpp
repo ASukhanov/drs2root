@@ -22,12 +22,13 @@ int mfilter_create(const double *amplitude, const int size, const int type, cons
   int imax=0,ifleft=0,ifright=0;
   double l2=0.;
   
+  printf("Creating filter\n");
   //init
   gmf_coeff = (double*) malloc(sizeof(double)*fsize);
   if(gmf_coeff==0) {printf("Could not allocate gmf_coeff\n"); exit(1);}
   
   gmf_type = type;
-  //printf("filter of type %i[%i] allocated at %x\n", gmf_type, fsize, int(gmf_coeff));
+  printf("filter of type %i[%i] allocated at %x\n", gmf_type, fsize, int(gmf_coeff));
   
   for(ii=0;ii<fsize;ii++) gmf_coeff[ii]=0.;
   
@@ -90,7 +91,8 @@ int mfilter_filter(const double *input, const int size, double *out, double *pea
 
 int mfilter_delete()
 {
-  if(gmf_out) free(gmf_out);
-  if(gmf_coeff) free(gmf_coeff);
+  printf("Deleting filter\n");
+  if(gmf_out) free(gmf_out); gmf_out = NULL;
+  if(gmf_coeff) free(gmf_coeff); gmf_coeff = NULL;
   return 0;
 }

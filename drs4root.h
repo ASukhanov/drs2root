@@ -2,6 +2,8 @@
 #define drs4root_h
 
 #include <TFile.h>
+#include <TH1S.h>
+#include <TH2S.h>
 
 #define FILTERING
 #define FAST_CALIBRATION
@@ -69,9 +71,9 @@ private:
   double bl_sum[kNCh], bl_sum2[kNCh];
   double waveform[kNCh][kLCh], ftime[kNCh][kLCh];
   long firstev_pos;
+  
   //
   void EventMinMax();
-  void Init();
   
 public:
   struct Event_t fEv;
@@ -86,7 +88,13 @@ public:
   Int_t   fevcount;
   UInt_t  fMin[kNCh], fMinPos[kNCh];
   UInt_t  fMax[kNCh], fMaxPos[kNCh];
+  Double_t fpeak_pos[kNCh];
 
+  TH2S  *fhch[kNCh];
+  TH1S  *fhpos[kNCh];
+  TH1S  *fhdt;
+  TH1S  *fhdled;
+  
   //unsigned short voltage[kLCh];
   //double waveform[kNCh][kLCh], time[kNCh][kLCh];
   //float bin_width[kNCh][kLCh];
@@ -97,8 +105,8 @@ public:
   static int bl_first;
   static int timing_calibration;
   static int regularize;
-  static int nEvents;
   static int gverb;
+  static int ghist;
 #ifdef FILTERING
   static int mf_shape, mf_size;
   double *mfilter_coeff;
@@ -109,6 +117,7 @@ public:
   drs4root(const Char_t *in="", const Char_t *out="");
   ~drs4root();
 
+  void Init();
   Int_t Skip_events(Int_t ev);
   Int_t Next_event();
   void Print_stat();
