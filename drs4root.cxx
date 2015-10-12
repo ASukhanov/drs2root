@@ -1,6 +1,5 @@
 #include <TROOT.h>
 #include <TSystem.h>
-//#include <Bytes.h>
 
 #include <fstream>
 #include <sstream>
@@ -22,10 +21,12 @@ double drs4root::threshold = 0.2;
 int drs4root::gverb = 0;
 double drs4root::invert[kNCh] = {1.,1.};
 int drs4root::ghist = 0;
+double drs4root::gthreshold_relative = 0.;
 #ifdef FILTERING
 #include "mfilter.h"
 int drs4root::mf_shape=0;
 int drs4root::mf_size=0;
+int drs4root::gfilter_roi_length=10;
 #endif
 
 int gverb = drs4root::gverb;
@@ -34,32 +35,6 @@ char gcobuf[256];
 char* strnz(const char* source, size_t num)
 { strncpy(gcobuf, source, num); gcobuf[num]=0; return & gcobuf[0];}
 #define CO(obj) strnz(obj,sizeof(obj))
-//,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-//'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-// Non-class functions
-//
-/*
-#ifdef FILTER_NONUNIFORM
-#include "Math/Interpolator.h"
-double mfi_coeffy[kMaxFilterLength], mfi_coeffx[kMaxFilterLength];
-int mfi_n;
-
-ROOT::Math::Interpolator inter(kMaxFilterLength, ROOT::Math::Interpolation::kCSPLINE);
-
-void mfi_set(double *yy, int nn)
-{
-  int ii;
-  for(ii=0;ii<nn;ii++) {mfi_coeffy[ii] = yy[ii]; mfi_coeffx[ii] = double(ii);}
-  mfi_n = nn;
-  inter.SetData(mfi_n, mfi_coeffx, mfi_coeffy);
-}
-double mfilter_interpolated(double xx)
-{
-  return inter.Eval(xx);
-}
-#endif
-*/
-//,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 // class implementation 
 //
@@ -130,13 +105,16 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
       else printf("Negative");
     printf(" pulse processing of ch %i\n",ch);
   }
-  printf("Threshold=%f\n",threshold);
+  if(gthreshold_relative != 0.) printf("Threshold is relative = %.1f of the peak\n", gthreshold_relative);
+  else printf("Threshold is absolute = %.1fV\n",threshold);
   printf("Verbosity=%i\n",gverb);
   if(baseline_npoints>1) 
     printf("Baseline subtraction for %i points starting at %i\n",baseline_npoints,bl_first);
 #ifdef FILTERING
   if(mf_size > kMaxFilterLength) mf_size = kMaxFilterLength;
   if(mf_size && mf_shape) printf("Filtering of type %i[%i] enabled\n",mf_shape,mf_size);
+  if(gfilter_roi_length) printf("Filter ROI is %i cells covering the peak\n",gfilter_roi_length);
+  else printf("Filter ROI is full area\n");
 #ifdef FILTER_NONUNIFORM
   printf("Non-Uniform-Sampled filtering\n");
 #endif
@@ -174,12 +152,18 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
 #endif
     if(gverb&8) {for(ii=0;ii<kLCh;ii++) printf("%i:%03i ",ii,int(fth.ch[ch].t[ii]*1000.)); printf("\n");}
   }
-  //firstev_pos = ftell(fD);
-  Init();
-  //
-  // create tree
+  // create histograms\ and tree
+  TString hname;
   if(ghist)
   {
+    for(ch=0;ch<kNCh;ch++)
+    {
+      hname = "hch"; hname += ch;
+      //cout<<"Creating hist d4r->fhch["<<ch<<"]"<<endl;
+      fhch[ch] = new TH2S(hname,hname,kLCh*2,0,200.,4000,-0.1,1.);
+      hname = "hch_time_corrected_"; hname += ch;
+      fhch_time_corrected[ch] = new TProfile(hname,hname,kLCh*10,-50,50.,-0.1,1.);
+    }
     ftree = new TTree("tree","drs2root tree");
     if(ftree==NULL){printf("failed to create tree\n");return;}
     ftree->Branch("peak",&fpeak,"fpeak[2]/D");
@@ -190,8 +174,14 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   #ifdef FILTERING
     ftree->Branch("peakMF",&fpkMF,"fpkMF[2]/D");
     ftree->Branch("peakposMF",&fpkpMF,"fpkpMF[2]/D");
-  #endif
+    for(ch=0;ch<kNCh;ch++)
+    {
+      hname = "hchMF"; hname += ch;
+      fhchMF[ch] = new TH2S(hname,hname,kLCh*2,0,200.,4000,-0.1,2.);
+    }
+  #endif    
   }
+  Init();
   return;
 }
 
@@ -221,24 +211,6 @@ void drs4root::Init()
   mfilter_coeff = 0;
   //for(ch=0;ch<kNCh;ch++) {peak[ch]=0.; peakpos[ch]=0.;};
 #endif
-  /*
-  if(ghist)
-  {
-    TString hname;
-    //TString htitle;
-    for(ch=0;ch<kNCh;ch++)
-    {
-      hname = "hch"; hname += ch;
-      cout<<"Creating hist d4r->fhch["<<ch<<"]"<<endl;
-      fhch[ch] = new TH2S(hname,hname,kLCh*2,0,200.,4000,-0.1,2.);
-      //fhch[ch]->Print();
-      hname = "hpos"; hname += ch;
-      fhpos[ch] = new TH1S(hname,hname,1000,0.,100.);
-    }
-    fhdt = new TH1S("hdt","dT using FIR",2000,-10.,10.);
-    fhdled = new TH1S("hdled","dT using Leading Edge Discriminator",2000,-10.,10.);
-  }
-  */
 }
 
 //void drs4root::First_event() { fseek(fD,firstev_pos,SEEK_SET); }
@@ -317,6 +289,10 @@ Int_t drs4root::Next_event()
       fbaseline[ch] /= double(baseline_npoints);        
       for(ii=0;ii<kLCh;ii++) waveform[ch][ii] -= fbaseline[ch];
     }
+  
+  // histogram raw waveforms
+  for(ch=0;ch<kNCh;ch++)
+  if(fhch[ch]) fhch[ch]->FillN(kLCh,ftime[ch],waveform[ch],(double* )NULL);
 
   // calculate single cell noise
   if(baseline_npoints > 0)
@@ -327,24 +303,25 @@ Int_t drs4root::Next_event()
     }
     
   // recalculate amplitudes of first two channels by averaging around peak
-  int half_top_width=2;
-  double na = double(half_top_width*2+1);
+  //int half_top_width=2;
+  //double na = double(half_top_width*2+1);
   for (ch=0 ; ch<2 ; ch++)
   {
-    fpeak[ch]=0.;
-    for (ii=fpeak_idx[ch]-half_top_width; ii<=fpeak_idx[ch]+half_top_width; ii++) fpeak[ch] += waveform[ch][ii];
-    fpeak[ch] /=na;
+    //fpeak[ch]=0.;
+    //for (ii=fpeak_idx[ch]-half_top_width; ii<=fpeak_idx[ch]+half_top_width; ii++) fpeak[ch] += waveform[ch][ii];
+    //fpeak[ch] /=na;
     asum[ch] += fpeak[ch];
     asum2[ch] += fpeak[ch]*fpeak[ch];
     //printf("wma[%i]=%.3f @ %i/%.3f\n",ch,fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
   }
   
   // DLED - Digital Leading Edge Discrimination
-  if (gverb&4) printf("Looking for threshold=%f crossing, trigcell %i\n",
-    threshold,fEv.h.tno);
   //fLED_time[ch][0] = fLED_time[ch][1] = 0.;
   for (ch=0;ch<2;ch++)
   {
+    if(gthreshold_relative != 0.) threshold = fpeak[ch]*gthreshold_relative;
+    if (gverb&4) printf("Looking for threshold=%f crossing, trigcell %i\n",
+      threshold,fEv.h.tno);
     fLED_time[ch] = 0.;
     for (ii=0 ; ii<1022 ; ii++)
         if (waveform[ch][ii] < threshold && waveform[ch][ii+1] >= threshold) 
@@ -354,6 +331,13 @@ Int_t drs4root::Next_event()
             ch, waveform[ch][ii], waveform[ch][ii+1], ii, ftime[ch][ii], ftime[ch][ii+1], ftime[ch][ch]);
           break;
         }
+  }
+  
+  // histogram of the corrected timing
+  for (ch=0;ch<2;ch++)
+  {
+    if(fhch_time_corrected[ch])
+      for(ii=0;ii<kLCh;ii++) fhch_time_corrected[ch]->Fill(ftime[ch][ii]-fLED_time[ch],waveform[ch][ii]);
   }
   
   // calculate distance of peaks with statistics
@@ -394,34 +378,42 @@ Int_t drs4root::Next_event()
     
     // FIR filtering
     //printf("mf_size=%i\n",mf_size);
-    int roil=0,rois=kLCh-1;; // reagion of interest for filtering
+    int roi_start; // beginning of the region of interest for filtering
+    int roi_length;
     double *ob[kNCh];
     if (mf_size && mf_shape)
     for(ch=0;ch<2;ch++)
     {
       ob[ch] = waveform[ch];
+      roi_length = gfilter_roi_length;
+      roi_start = 0;
       #ifdef FILTER_NONUNIFORM
-        roil = 10; // interested only in peak finding is small area around peak
-        rois = fpeak_idx[ch] - mf_idx_max - roil/2;
-        ob[ch] = NULL;// don't want it
+        if(roi_length == 0)  roi_length = kLCh - mf_size;
+        else       roi_start = fpeak_idx[ch] - mf_idx_max - roi_length/2;
+        //ob[ch] = NULL;// don't want it
+        ob[ch] = &(waveform[ch][roi_start]);
       #endif
       if(gverb&0x100) printf("initial fpeak=%.3f @ %i/%.3f\n",fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
       //in-place filter
-      //printf("->filter#%i(%i[%i], %.3f,%.3f...)mf_idx_max=%i\n",ch,rois,roil,waveform[ch][rois],ftime[ch][rois],mf_idx_max);
+      //printf("->filter#%i(%i[%i], %.3f,%.3f...)mf_idx_max=%i\n",ch,roi_start,roi_length,waveform[ch][roi_start],ftime[ch][roi_start],mf_idx_max);
       //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-      mfilter_filter(&(ftime[ch][rois]),&(waveform[ch][rois]),roil,ob[ch],&(fpkMF[ch]),&(fpkpMF[ch]),&fpkiMF[ch]);
+      mfilter_filter(&(ftime[ch][roi_start]),&(waveform[ch][roi_start]),roi_length,ob[ch],&(fpkMF[ch]),&(fpkpMF[ch]),&fpkiMF[ch]);
       //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-      fpkiMF[ch] += rois + mf_idx_max;
+      fpkiMF[ch] += roi_start;// + mf_idx_max;
+      
       if(gverb&0x40){for(ii=0;ii<kLCh;ii++) printf("%i,%.2f:%.4f ",ii,ftime[ch][ii],waveform[ch][ii]);}  
-      if(gverb&0x100) printf("filtered peak=%.3f @ %i/%.3f\n",fpkMF[ch],fpkiMF[ch],fpkpMF[ch]);    
+      if(gverb&0x100) printf("filtered peak=%.3f @ %i/%.3f\n",fpkMF[ch],fpkiMF[ch],fpkpMF[ch]);
+      for (ch=0;ch<kNCh;ch++)
+        if(fhchMF[ch]) fhchMF[ch]->FillN(kLCh,ftime[ch],waveform[ch],(double* )NULL);
     }
     if(gverb&0x100) 
       printf("dt=%f\n",fpkpMF[1] - fpkpMF[0]);
 #endif
   
+  // fill the tree
+  if(ftree) ftree->Fill();
   if((fevcount%1000)==999)
     Print_stat();
-  if(ftree) ftree->Fill();
   return 0;
 }
 void drs4root::Print_header()

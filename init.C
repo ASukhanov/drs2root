@@ -13,11 +13,13 @@
   d4r->invert[0] = 1.; // negative pulse processing of ch0
   d4r->invert[1] = 1.; // negative pulse processing of ch1
   d4r->ghist = 0x1; //enable histogramming
+  d4r->gthreshold_relative = 0.5;// use relative threshold level, if 0. then use absolute
+  d4r->threshold = 0.2; // absolute threshold
 
   //if FILTERING defined
-  d4r->mf_shape = 2; // 0: no filtering, 1: from first event, 2: rectangle (moving average), 3: triangle
-  d4r->mf_size = 4;
-  /**/
+  d4r->mf_shape = 1; // 0: no filtering, 1: from first event, 2: rectangle (moving average), 3: triangle
+  d4r->mf_size = 100;
+  //d4r->gfilter_roi_length = 0; // 0 to filter all cells, it is time consuming
   
   d4r = new drs4root("~/data/1509301458.drs");
   cout<<"Functions: ";

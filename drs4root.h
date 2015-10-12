@@ -4,6 +4,7 @@
 #include <TFile.h>
 #include <TH1S.h>
 #include <TH2S.h>
+#include <TProfile.h>
 #include <TTree.h>
 
 #define FILTERING
@@ -67,21 +68,27 @@ private:
   int ndt;
   double sumdt, sumdt2;
   double sum_widths[kNCh];
-  //double wmax[kNCh];
-  //int cmax[kNCh];
   double asum[kNCh], asum2[kNCh];
   double bl_sum[kNCh], bl_sum2[kNCh];
   double waveform[kNCh][kLCh], ftime[kNCh][kLCh];
   long firstev_pos;
-  
   //
   void EventMinMax();
   
 public:
+  static double threshold;
+  static double invert[kNCh];
+  static int baseline_npoints;
+  static int bl_first;
+  static int timing_calibration;
+  static int regularize;
+  static int gverb;
+  static int ghist;
+  static int gfilter_roi_length;
+  static double gthreshold_relative;
+
   struct Event_t fEv;
-
   struct Time_header_t fth;
-
   FILE    *fD;
   TFile   *ffile;
   Int_t   fsize;
@@ -97,34 +104,17 @@ public:
   Int_t   fpeak_idx[kNCh];
   Double_t fbaseline[kNCh];
   Double_t fone_cell[kNCh];
-
-  /*TH2S  *fhch[kNCh];
-  TH1S  *fhpos[kNCh];
-  TH1S  *fhdt;
-  TH1S  *fhdled;
-  */
-  
-  //unsigned short voltage[kLCh];
-  //double waveform[kNCh][kLCh], time[kNCh][kLCh];
-  //float bin_width[kNCh][kLCh];
+  TH2S  *fhch[kNCh];
+  TProfile  *fhch_time_corrected[kNCh];
    
-  static double threshold;
-  static double invert[kNCh];
-  static int baseline_npoints;
-  static int bl_first;
-  static int timing_calibration;
-  static int regularize;
-  static int gverb;
-  static int ghist;
-  
 #ifdef FILTERING
   Double_t fpkMF[kNCh], fpkpMF[kNCh];
   Int_t fpkiMF[kNCh];
   static int mf_shape, mf_size;
-  //double mfilter_coeff[kMaxFilterLength],mfilter_x[kMaxFilterLength];
   double *mfilter_coeff,*mfilter_x;
   Int_t mf_idx_max;
-  //double peak[kNCh],peakpos[kNCh];
+  TH2S  *fhchMF[kNCh];
+  //TH2S  *fhch_raw[kNCh];
 #endif
 
   //drs4root();
