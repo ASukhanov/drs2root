@@ -14,7 +14,7 @@ all:            $(PROGRAMS)
 
 drs4root:           $(dqSO)
 $(dqSO):       $(dqO)
-		$(LD) $(SOFLAGS) $(LDFLAGS) $^ $(EXPLLINKLIBS) $(OutPutOpt)$@
+		$(LD) $(SOFLAGS) $(LDFLAGS) $^ $(EXPLLINKLIBS) -lgsl -lgslcblas $(OutPutOpt)$@
 		@echo "$@ done"
 
 clean:

@@ -1,5 +1,7 @@
 {
-  TH2S *h2s; // need this for gSystem->Load to work
+  TH2S *anyh2s; // need this for gSystem->Load to work
+  TTree *anytree; // need this for gSystem->Load to work
+  
   cout<<"gSystem.Load(""drs4root"")"<<endl;
   gSystem->Load("drs4root");
   
@@ -13,8 +15,8 @@
   d4r->ghist = 0x1; //enable histogramming
 
   //if FILTERING defined
-  d4r->mf_shape = 1; // 0: no filtering, 1: from first event, 2: rectangle, 3: triangle
-  d4r->mf_size = 100;
+  d4r->mf_shape = 2; // 0: no filtering, 1: from first event, 2: rectangle (moving average), 3: triangle
+  d4r->mf_size = 4;
   /**/
   
   d4r = new drs4root("~/data/1509301458.drs");

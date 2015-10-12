@@ -34,7 +34,35 @@ char gcobuf[256];
 char* strnz(const char* source, size_t num)
 { strncpy(gcobuf, source, num); gcobuf[num]=0; return & gcobuf[0];}
 #define CO(obj) strnz(obj,sizeof(obj))
+//,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+//'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+// Non-class functions
+//
+/*
+#ifdef FILTER_NONUNIFORM
+#include "Math/Interpolator.h"
+double mfi_coeffy[kMaxFilterLength], mfi_coeffx[kMaxFilterLength];
+int mfi_n;
 
+ROOT::Math::Interpolator inter(kMaxFilterLength, ROOT::Math::Interpolation::kCSPLINE);
+
+void mfi_set(double *yy, int nn)
+{
+  int ii;
+  for(ii=0;ii<nn;ii++) {mfi_coeffy[ii] = yy[ii]; mfi_coeffx[ii] = double(ii);}
+  mfi_n = nn;
+  inter.SetData(mfi_n, mfi_coeffx, mfi_coeffy);
+}
+double mfilter_interpolated(double xx)
+{
+  return inter.Eval(xx);
+}
+#endif
+*/
+//,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+//'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+// class implementation 
+//
 double sigma(int nn, double sum, double sum2)
 { return sqrt(1./double(nn-1)*(sum2-sum*sum/double(nn)));}
 
@@ -109,6 +137,9 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
 #ifdef FILTERING
   if(mf_size > kMaxFilterLength) mf_size = kMaxFilterLength;
   if(mf_size && mf_shape) printf("Filtering of type %i[%i] enabled\n",mf_shape,mf_size);
+#ifdef FILTER_NONUNIFORM
+  printf("Non-Uniform-Sampled filtering\n");
+#endif
 #endif 
   if(regularize) printf("Cell Regularization is on!\n");
   
@@ -145,6 +176,22 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   }
   //firstev_pos = ftell(fD);
   Init();
+  //
+  // create tree
+  if(ghist)
+  {
+    ftree = new TTree("tree","drs2root tree");
+    if(ftree==NULL){printf("failed to create tree\n");return;}
+    ftree->Branch("peak",&fpeak,"fpeak[2]/D");
+    ftree->Branch("peakpos",&fpeak_pos,"fpeak_pos[2]/D");
+    ftree->Branch("LED_time",&fLED_time,"ftime[2]/D");
+    ftree->Branch("baseline",&fbaseline,"fbaseline[2]/D");
+    ftree->Branch("onecell",&fone_cell,"fone_cell[2]/D");
+  #ifdef FILTERING
+    ftree->Branch("peakMF",&fpkMF,"fpkMF[2]/D");
+    ftree->Branch("peakposMF",&fpkpMF,"fpkpMF[2]/D");
+  #endif
+  }
   return;
 }
 
@@ -163,7 +210,7 @@ void drs4root::Init()
   sumdt = sumdt2 = 0.;
   for(ch=0;ch<kNCh;ch++) 
   {
-    wmax[ch]=0.; 
+    fpeak[ch]=0.; 
     asum[ch]=0.; 
     asum2[ch]=0.; 
     bl_sum[ch]=0.; 
@@ -172,8 +219,9 @@ void drs4root::Init()
 #ifdef FILTERING
   mfilter_delete(); // to free the allocated memory
   mfilter_coeff = 0;
-  for(ch=0;ch<kNCh;ch++) {peak[kNCh]=0.; peakpos[kNCh]=0.;};
+  //for(ch=0;ch<kNCh;ch++) {peak[ch]=0.; peakpos[ch]=0.;};
 #endif
+  /*
   if(ghist)
   {
     TString hname;
@@ -190,6 +238,7 @@ void drs4root::Init()
     fhdt = new TH1S("hdt","dT using FIR",2000,-10.,10.);
     fhdled = new TH1S("hdled","dT using Leading Edge Discriminator",2000,-10.,10.);
   }
+  */
 }
 
 //void drs4root::First_event() { fseek(fD,firstev_pos,SEEK_SET); }
@@ -215,7 +264,7 @@ void drs4root::EventMinMax()
 Int_t drs4root::Next_event()
 {
   int ii,ch;
-  double t1, t2, tt[kNCh], dt, dv, v; 
+  double t1, t2, dt; 
   
   if (fread(&fEv,sizeof(fEv),1,fD) != 1)
     {return 1;}
@@ -226,10 +275,12 @@ Int_t drs4root::Next_event()
   for(ch=0;ch<kNCh;ch++)
   {
     if (gverb&(2|8)) printf("ch%i trig cell %i timecal=%f\n",ch,fEv.h.tno,fth.ch[ch].t[fEv.h.tno]);
+    fpeak[ch] = 0.;
     for (ii=0 ; ii<1024 ; ii++) {
       // convert data to volts
       waveform[ch][ii] = (fEv.ch[ch].a[ii] / 65536. * (1.-2.*invert[ch]) + invert[ch] + fEv.h.range/1000.0 - 0.5);
-      if(waveform[ch][ii]>wmax[ch]) {wmax[ch]=waveform[ch][ii]; cmax[ch]=ii;}
+      if(waveform[ch][ii]>fpeak[ch]) 
+      {  fpeak[ch]=waveform[ch][ii]; fpeak_idx[ch]=ii;}
       if (gverb&2) printf("%i:%03i ",ii,int(waveform[ch][ii]*1000.));            
       // calculate time for this cell
   #ifdef FAST_CALIBRATION
@@ -243,30 +294,11 @@ Int_t drs4root::Next_event()
   #endif
       if (gverb&8) printf("%03i ",int(ftime[ch][ii]*1000.)); 
     }
-    if (gverb&(2|8)) printf("\nch%i, max %f @ %i\n",ch,wmax[ch],cmax[ch]);
+    fpeak_pos[ch]=ftime[ch][fpeak_idx[ch]];
+    if (gverb&(2|8)) 
+      printf("\nch%i, max %.3f @ %i/%.3f\n",ch,fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
   }
   
-#ifdef FILTERING
-  // use the first channel of first event to build the arbitr1.ary matching filter
-  if (fevcount==1) 
-  {
-    mf_size=mfilter_create(waveform[0],kLCh,mf_shape,mf_size,&mfilter_coeff);
-    if(mf_size)
-    {
-      printf("MFilter of type %i[%i] created:\n",mf_shape,mf_size);
-      double l2=0.;
-      for(ii=0;ii<mf_size;ii++) 
-      {
-        printf("%i:%f \n",ii,mfilter_coeff[ii]);
-        l2 += mfilter_coeff[ii]*mfilter_coeff[ii];
-      }
-      double mf_max=0.; 
-      int mf_pos=0;
-      for(ii=0;ii<mf_size;ii++) if(mfilter_coeff[ii]>mf_max) {mf_max=mfilter_coeff[ii]; mf_pos=ii;}
-      printf("MFilter max=%f @ %i. L2=%f\n",mf_max,mf_pos,l2);
-    }
-  }
-#endif
   // align cell #0 of all channels
   t1 = ftime[0][(kLCh-fEv.h.tno) % kLCh];
   for (ch=1 ; ch<kNCh ; ch++) {
@@ -274,118 +306,122 @@ Int_t drs4root::Next_event()
       dt = t1 - t2;
       if (gverb&8) printf("ch%i trig@%i, %f-%f, aligned for %f\n",ch,fEv.h.tno,t1,t2,dt);
       for (ii=0 ; ii<kLCh ; ii++) ftime[ch][ii] += dt;
+      fpeak_pos[ch]=ftime[ch][fpeak_idx[ch]];
   }
   // baseline subtraction
   if(baseline_npoints > 1)
     for(ch=0;ch<kNCh;ch++)
     {
-      for(v=0., ii=bl_first; ii<bl_first+baseline_npoints; ii++)
-        v += waveform[ch][ii];
-      v /= double(baseline_npoints);        
-      for(ii=0;ii<kLCh;ii++) waveform[ch][ii] -= v;
+      for(fbaseline[ch]=0., ii=bl_first; ii<bl_first+baseline_npoints; ii++)
+        fbaseline[ch] += waveform[ch][ii];
+      fbaseline[ch] /= double(baseline_npoints);        
+      for(ii=0;ii<kLCh;ii++) waveform[ch][ii] -= fbaseline[ch];
     }
-  // regularization of the cell intervals to make them equidistant
-  double time_shift, expected_time, prev;
-  if(regularize)
-  {
-    for(ch=0;ch<2;ch++)
-      for(prev=waveform[ch][0],ii=1;ii<kLCh;ii++)
-      {
-        dt=ftime[ch][ii]-ftime[ch][ii-1];
-        expected_time = double(ii)*kCellWidth;
-        time_shift = ftime[ch][ii] - expected_time;
-        ftime[ch][ii] = expected_time;
-        dv=waveform[ch][ii]-prev;
-        prev = waveform[ch][ii];
-        waveform[ch][ii] +=  dv/dt*time_shift;
-      }
-  }            
-#ifdef FILTERING
-  // FIR filtering
-  //printf("mf_size=%i\n",mf_size);
-  if (mf_size && mf_shape)
-  for(ch=0;ch<2;ch++)
-  {
-    //in-place filter
-    mfilter_filter(waveform[ch],kLCh,waveform[ch],&(peak[ch]),&(peakpos[ch]));
-    //recalculate max
-    for(ii=0;ii<kLCh-mf_size;ii++)
-      if(waveform[ch][ii]>wmax[ch]) {wmax[ch]=waveform[ch][ii]; cmax[ch]=ii;}
-    if(gverb&0x40){for(ii=0;ii<kLCh;ii++) printf("%i,%.2f:%.4f ",ii,ftime[ch][ii],waveform[ch][ii]);  printf("\nmax=%f @ %i\n",wmax[ch],cmax[ch]);}
-    // calculate peak position using 3-point quadratic approximation
-    double dymaxl, dymaxr, dx;
-    dymaxl = waveform[ch][cmax[ch]] - waveform[ch][cmax[ch]-1];
-    dymaxr = waveform[ch][cmax[ch]+1] - waveform[ch][cmax[ch]];
-    dx = ftime[ch][cmax[ch]] - ftime[ch][ii-1];
-    if(dymaxl-dymaxr == 0.) {cout<<"Computational error!\n";}
-    fpeak_pos[ch] = dymaxl/(dymaxl-dymaxr)/dx + double(ftime[ch][cmax[ch]]); // TODO add the filter width
-    if(gverb&0x200) 
-      printf("ch%i: %.3f,%.3f-%.3f,%.3f-%.3f,%.3f, pos=%4f\n",ch,
-             waveform[ch][cmax[ch]-1],ftime[ch][cmax[ch]-1],
-             waveform[ch][cmax[ch]],ftime[ch][cmax[ch]],
-             waveform[ch][cmax[ch]+1],ftime[ch][cmax[ch]+1],fpeak_pos[ch]);
-  }
-  if(gverb&0x200) printf("dt=%f\n",fpeak_pos[1] - fpeak_pos[0]);
-#endif
 
   // calculate single cell noise
   if(baseline_npoints > 0)
     for (ch=0;ch<2;ch++)
     {
-      v = waveform[ch][bl_first];
-      bl_sum[ch] += v; bl_sum2[ch] += v*v;
+      fone_cell[ch] = waveform[ch][bl_first];
+      bl_sum[ch] += fone_cell[ch]; bl_sum2[ch] += fone_cell[ch]*fone_cell[ch];
     }
-  // estimate amplitudes of first two channels by averaging around peak
+    
+  // recalculate amplitudes of first two channels by averaging around peak
   int half_top_width=2;
   double na = double(half_top_width*2+1);
   for (ch=0 ; ch<2 ; ch++)
   {
-    wmax[ch]=0.;
-    for (ii=cmax[ch]-half_top_width; ii<=cmax[ch]+half_top_width; ii++) wmax[ch] += waveform[ch][ii];
-    wmax[ch] /=na;
-    asum[ch] += wmax[ch];
-    asum2[ch] += wmax[ch]*wmax[ch];
+    fpeak[ch]=0.;
+    for (ii=fpeak_idx[ch]-half_top_width; ii<=fpeak_idx[ch]+half_top_width; ii++) fpeak[ch] += waveform[ch][ii];
+    fpeak[ch] /=na;
+    asum[ch] += fpeak[ch];
+    asum2[ch] += fpeak[ch]*fpeak[ch];
+    //printf("wma[%i]=%.3f @ %i/%.3f\n",ch,fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
   }
+  
   // DLED - Digital Leading Edge Discrimination
   if (gverb&4) printf("Looking for threshold=%f crossing, trigcell %i\n",
     threshold,fEv.h.tno);
-  tt[0] = tt[1] = 0.;
+  //fLED_time[ch][0] = fLED_time[ch][1] = 0.;
   for (ch=0;ch<2;ch++)
   {
+    fLED_time[ch] = 0.;
     for (ii=0 ; ii<1022 ; ii++)
         if (waveform[ch][ii] < threshold && waveform[ch][ii+1] >= threshold) 
         {
-          tt[ch] = (threshold-waveform[ch][ii])/(waveform[ch][ii+1]-waveform[ch][ii])*(ftime[ch][ii+1]-ftime[ch][ii])+ftime[ch][ii];
+          fLED_time[ch] = (threshold-waveform[ch][ii])/(waveform[ch][ii+1]-waveform[ch][ii])*(ftime[ch][ii+1]-ftime[ch][ii])+ftime[ch][ii];
           if (gverb&4) printf("Cross[%i]: %f,%f @ %i,%f,%f t=%f\n", 
-            ch, waveform[ch][ii], waveform[ch][ii+1], ii, ftime[ch][ii], ftime[ch][ii+1], tt[ch]);
+            ch, waveform[ch][ii], waveform[ch][ii+1], ii, ftime[ch][ii], ftime[ch][ii+1], ftime[ch][ch]);
           break;
         }
   }
+  
   // calculate distance of peaks with statistics
-  if (tt[0] > 0 && tt[1] > 0) {
+  if (fLED_time[0] > 0. && fLED_time[1] > 0.) {
       ndt++;
-      dt = tt[1] - tt[0];
+      dt = fLED_time[1] - fLED_time[0];
       sumdt += dt;
       sumdt2 += dt*dt;
   }
-  // histogram amplitudes
-  if(ghist)
-  {
-    for (ch=0;ch<kNCh;ch++)
+    
+#ifdef FILTERING
+    // use the first channel of first event to build the matching filter
+    double mf_max; 
+    if (fevcount==1 && mf_shape) 
     {
-      //printf("filling %i\n", ch);
-      if(fhch[ch]) 
+      double xx[kMaxFilterLength];
+      for(ii=0;ii<kMaxFilterLength;ii++) xx[ii] = double(ii)*kCellWidth;
+
+      //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+      mf_size=mfilter_create(ftime[ch],waveform[0],kLCh,kCellWidth,mf_shape,mf_size,&mfilter_coeff,&mfilter_x);
+      //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+      if(mf_size)
       {
-        fhch[ch]->FillN(kLCh,ftime[ch],waveform[ch],(double* )NULL);
-        //for(ii=0;ii<kLCh;ii++) fhch[ch]->Fill(ftime[ch][ii],waveform[ch][ii]);
+        mfi_set(xx,mfilter_coeff,mf_size);
+        printf("MFilter of type %i[%i] created:\n",mf_shape,mf_size);
+        double l2=0.;
+        for(ii=0;ii<mf_size;ii++) 
+        {
+          printf("%i:fx=%f,fy%f\n",ii,mfilter_x[ii],mfilter_coeff[ii]);
+          l2 += mfilter_coeff[ii]*mfilter_coeff[ii];
+        }
+        mf_max=0.; 
+        mf_idx_max=0;
+        for(ii=0;ii<mf_size;ii++) if(mfilter_coeff[ii]>mf_max) {mf_max=mfilter_coeff[ii]; mf_idx_max=ii;}
+        printf("MFilter max=%f @ %i. L2=%f\n",mf_max,mf_idx_max,l2);
       }
-      fhpos[ch]->Fill(fpeak_pos[ch]);
     }
-    fhdt->Fill(fpeak_pos[1]-fpeak_pos[0]);
-    fhdled->Fill(dt);
-  }
+    
+    // FIR filtering
+    //printf("mf_size=%i\n",mf_size);
+    int roil=0,rois=kLCh-1;; // reagion of interest for filtering
+    double *ob[kNCh];
+    if (mf_size && mf_shape)
+    for(ch=0;ch<2;ch++)
+    {
+      ob[ch] = waveform[ch];
+      #ifdef FILTER_NONUNIFORM
+        roil = 10; // interested only in peak finding is small area around peak
+        rois = fpeak_idx[ch] - mf_idx_max - roil/2;
+        ob[ch] = NULL;// don't want it
+      #endif
+      if(gverb&0x100) printf("initial fpeak=%.3f @ %i/%.3f\n",fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
+      //in-place filter
+      //printf("->filter#%i(%i[%i], %.3f,%.3f...)mf_idx_max=%i\n",ch,rois,roil,waveform[ch][rois],ftime[ch][rois],mf_idx_max);
+      //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+      mfilter_filter(&(ftime[ch][rois]),&(waveform[ch][rois]),roil,ob[ch],&(fpkMF[ch]),&(fpkpMF[ch]),&fpkiMF[ch]);
+      //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+      fpkiMF[ch] += rois + mf_idx_max;
+      if(gverb&0x40){for(ii=0;ii<kLCh;ii++) printf("%i,%.2f:%.4f ",ii,ftime[ch][ii],waveform[ch][ii]);}  
+      if(gverb&0x100) printf("filtered peak=%.3f @ %i/%.3f\n",fpkMF[ch],fpkiMF[ch],fpkpMF[ch]);    
+    }
+    if(gverb&0x100) 
+      printf("dt=%f\n",fpkpMF[1] - fpkpMF[0]);
+#endif
+  
   if((fevcount%1000)==999)
     Print_stat();
+  if(ftree) ftree->Fill();
   return 0;
 }
 void drs4root::Print_header()

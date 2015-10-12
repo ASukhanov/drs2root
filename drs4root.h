@@ -4,8 +4,10 @@
 #include <TFile.h>
 #include <TH1S.h>
 #include <TH2S.h>
+#include <TTree.h>
 
 #define FILTERING
+
 #define FAST_CALIBRATION
 
 enum
@@ -65,8 +67,8 @@ private:
   int ndt;
   double sumdt, sumdt2;
   double sum_widths[kNCh];
-  double wmax[kNCh];
-  int cmax[kNCh];
+  //double wmax[kNCh];
+  //int cmax[kNCh];
   double asum[kNCh], asum2[kNCh];
   double bl_sum[kNCh], bl_sum2[kNCh];
   double waveform[kNCh][kLCh], ftime[kNCh][kLCh];
@@ -88,12 +90,19 @@ public:
   Int_t   fevcount;
   UInt_t  fMin[kNCh], fMinPos[kNCh];
   UInt_t  fMax[kNCh], fMaxPos[kNCh];
+  TTree   *ftree;
+  Double_t fpeak[kNCh];
   Double_t fpeak_pos[kNCh];
+  Double_t fLED_time[kNCh];
+  Int_t   fpeak_idx[kNCh];
+  Double_t fbaseline[kNCh];
+  Double_t fone_cell[kNCh];
 
-  TH2S  *fhch[kNCh];
+  /*TH2S  *fhch[kNCh];
   TH1S  *fhpos[kNCh];
   TH1S  *fhdt;
   TH1S  *fhdled;
+  */
   
   //unsigned short voltage[kLCh];
   //double waveform[kNCh][kLCh], time[kNCh][kLCh];
@@ -107,10 +116,15 @@ public:
   static int regularize;
   static int gverb;
   static int ghist;
+  
 #ifdef FILTERING
+  Double_t fpkMF[kNCh], fpkpMF[kNCh];
+  Int_t fpkiMF[kNCh];
   static int mf_shape, mf_size;
-  double *mfilter_coeff;
-  double peak[kNCh],peakpos[kNCh];
+  //double mfilter_coeff[kMaxFilterLength],mfilter_x[kMaxFilterLength];
+  double *mfilter_coeff,*mfilter_x;
+  Int_t mf_idx_max;
+  //double peak[kNCh],peakpos[kNCh];
 #endif
 
   //drs4root();
