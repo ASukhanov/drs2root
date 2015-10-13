@@ -105,7 +105,7 @@ public:
   Double_t fbaseline[kNCh];
   Double_t fone_cell[kNCh];
   TH2S  *fhch[kNCh];
-  TProfile  *fhch_time_corrected[kNCh];
+  TProfile  *fprofile[kNCh]; // time-corrected profile of the waveform
    
 #ifdef FILTERING
   Double_t fpkMF[kNCh], fpkpMF[kNCh];

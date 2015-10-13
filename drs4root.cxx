@@ -162,7 +162,7 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
       //cout<<"Creating hist d4r->fhch["<<ch<<"]"<<endl;
       fhch[ch] = new TH2S(hname,hname,kLCh*2,0,200.,4000,-0.1,1.);
       hname = "hch_time_corrected_"; hname += ch;
-      fhch_time_corrected[ch] = new TProfile(hname,hname,kLCh*10,-50,50.,-0.1,1.);
+      fprofile[ch] = new TProfile(hname,hname,kLCh*10,-50.,50.,-0.1,1.);
     }
     ftree = new TTree("tree","drs2root tree");
     if(ftree==NULL){printf("failed to create tree\n");return;}
@@ -336,8 +336,8 @@ Int_t drs4root::Next_event()
   // histogram of the corrected timing
   for (ch=0;ch<2;ch++)
   {
-    if(fhch_time_corrected[ch])
-      for(ii=0;ii<kLCh;ii++) fhch_time_corrected[ch]->Fill(ftime[ch][ii]-fLED_time[ch],waveform[ch][ii]);
+    if(fprofile[ch])
+      for(ii=0;ii<kLCh;ii++) fprofile[ch]->Fill(ftime[ch][ii]-fLED_time[ch],waveform[ch][ii]);
   }
   
   // calculate distance of peaks with statistics
