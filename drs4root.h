@@ -6,6 +6,7 @@
 #include <TH2S.h>
 #include <TProfile.h>
 #include <TTree.h>
+#include <TGraph.h>
 
 #define FILTERING
 
@@ -106,6 +107,7 @@ public:
   Double_t fone_cell[kNCh];
   TH2S  *fhch[kNCh];
   TProfile  *fprofile[kNCh]; // time-corrected profile of the waveform
+  TGraph *fgraph;
    
 #ifdef FILTERING
   Double_t fpkMF[kNCh], fpkpMF[kNCh];
@@ -122,12 +124,19 @@ public:
   ~drs4root();
 
   void Init();
+  void Set_shape(Double_t *xx, Double_t *yy, Int_t size);
+  TGraph *GetFilterGraph() {return fgraph;}; // graph of the filter coefficients
   Int_t Skip_events(Int_t ev);
   Int_t Next_event();
   void Print_stat();
   //void First_event(); //obsolete, just reuse init.C
   void Print_header();
   void Print_event();
+  TProfile *GetProfile(Int_t ch) {return fprofile[ch];}
+  TH2S *GetHistRaw(Int_t ch) {return fhch[ch];}
+  TH2S *GetHistFiltered(Int_t ch) {return fhchMF[ch];}
+  void SetFilter(Int_t shape=0, Int_t ntaps=10) {mf_shape = shape; mf_size = ntaps;}
+  void Loop(Int_t nEvents=999999999);
   ClassDef(drs4root,0)
 };
 #endif

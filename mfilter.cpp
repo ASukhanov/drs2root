@@ -40,22 +40,26 @@ int mfilter_create(const double *xx, const double *yy, const int size, const dou
   
   gmf_type = type;
   printf("filter of type %i[%i] allocated at %lx\n", gmf_type, fsize, long(gmf_coeff));
+  //for(ii=0;ii<size;ii++) printf("xy=%.3f,%.3f\n",xx[ii],yy[ii]);
   
   for(ii=0;ii<fsize;ii++) gmf_coeff[ii]=0.;
   
   switch (type)
   {
-    case kFShape_arbitrary:
+    case kFShape_1st_event:
+    case kFShape_external:
       for(ii=0;ii<size;ii++) if(yy[ii]>max) {max=yy[ii];imax=ii;}
-      for(ii=imax-fsize/2;ii<imax;ii++) if(yy[ii]>kFilterThreshold) break;
+      ii = imax-fsize/2;
+      if(ii<1) ii = 0;
+      for(;ii<imax;ii++) if(yy[ii]>kFilterThreshold) break;
       ifleft=ii;
-      for(ii=imax+fsize/2;ii>imax;ii--) if(yy[ii]>kFilterThreshold) break;
+      for(ii=imax; ii<imax+fsize/2; ii++) if(yy[ii]<kFilterThreshold) break;
       ifright=ii;
       gmf_size = ifright - ifleft;
       for(ii=0;ii<gmf_size;ii++) 
       {
         gmf_coeff[ii]=yy[ii+ifleft];
-        gmf_x[ii]=xx[ii+ifleft];
+        gmf_x[ii]=xx[ii+ifleft] - xx[ifleft];
       } 
       break;
     case kFShape_rectangle:
@@ -85,7 +89,8 @@ int mfilter_create(const double *xx, const double *yy, const int size, const dou
       gmf_size = 0;
       return gmf_size;
   }
-  printf("gmf_size %i,ileft %i\n",gmf_size,ifleft);
+  gmf_size--;// the rightmost point is used only for interpolation
+  printf("gmf_size %i,ileft %i, max=%f @ %i\n",gmf_size,ifleft,max,imax);
   
   // L2-norm
   for(l2=0., ii=0;ii<gmf_size;ii++) {l2 += gmf_coeff[ii]*gmf_coeff[ii];}

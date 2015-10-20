@@ -3,9 +3,10 @@
 
 enum
 {
-  kFShape_arbitrary = 1,
+  kFShape_1st_event = 1,
   kFShape_rectangle = 2,
-  kFShape_triangle = 3
+  kFShape_triangle = 3,
+  kFShape_external = 4
 };
 
 int mfilter_create(const double *x, const double *y, const int n, double xstep, const int type, const int ntaps, double **coefficients, double **coeff_x);

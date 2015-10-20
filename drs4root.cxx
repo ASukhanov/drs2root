@@ -1,3 +1,4 @@
+//#include <stdlib.h> // for exit()
 #include <TROOT.h>
 #include <TSystem.h>
 
@@ -161,7 +162,7 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
       hname = "hch"; hname += ch;
       //cout<<"Creating hist d4r->fhch["<<ch<<"]"<<endl;
       fhch[ch] = new TH2S(hname,hname,kLCh*2,0,200.,4000,-0.1,1.);
-      hname = "hch_time_corrected_"; hname += ch;
+      hname = "d4r_profile_"; hname += ch;
       fprofile[ch] = new TProfile(hname,hname,kLCh*10,-50.,50.,-0.1,1.);
     }
     ftree = new TTree("tree","drs2root tree");
@@ -233,6 +234,45 @@ void drs4root::EventMinMax()
     }
   }
 }
+//,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+//'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+void drs4root::Set_shape(Double_t *xx, Double_t *yy, Int_t size)
+{
+  double mf_max;
+  Int_t ii;
+  //double xf[kMaxFilterLength];
+  //for(ii=0;ii<kMaxFilterLength;ii++) xf[ii] = double(ii)*kCellWidth;
+
+  //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+  mf_size=mfilter_create(xx,yy,size,kCellWidth,mf_shape,mf_size,&mfilter_coeff,&mfilter_x);
+  //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+  if(mf_size > kMaxFilterLength) 
+  {
+    printf("ERROR, filter size %i > %i\n",mf_size,kMaxFilterLength);
+    gSystem->Abort(1);
+  }
+  if(mf_size)
+  {
+    //for(ii=0;ii<mf_size+1;ii++) printf("->mfi_set(%.3f,%.3f)\n",mfilter_x[ii],mfilter_coeff[ii]);
+    mfi_set(mfilter_x,mfilter_coeff,mf_size);
+    printf("MFilter of type %i[%i] created:\n",mf_shape,mf_size);
+    double l2=0.;
+    for(ii=0;ii<mf_size;ii++) 
+    {
+      printf("%i:fx=%f,fy%f\n",ii,mfilter_x[ii],mfilter_coeff[ii]);
+      l2 += mfilter_coeff[ii]*mfilter_coeff[ii];
+    }
+    mf_max=0.; 
+    mf_idx_max=0;
+    for(ii=0;ii<mf_size;ii++) if(mfilter_coeff[ii]>mf_max) {mf_max=mfilter_coeff[ii]; mf_idx_max=ii;}
+    // The L2-normalized filter improves the signal/noise by factor of 1./mf_max. 
+    printf("MFilter max=%f @ %i. Expected signal/noise improvement %.2f. L2=%f\n",mf_max,mf_idx_max,1./mf_max,l2);
+    fgraph = new TGraph(mf_size,mfilter_x,mfilter_coeff);
+  }
+  else printf("Failed to create mfilter\n");
+}
+//,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+//'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Int_t drs4root::Next_event()
 {
   int ii,ch;
@@ -267,7 +307,7 @@ Int_t drs4root::Next_event()
       if (gverb&8) printf("%03i ",int(ftime[ch][ii]*1000.)); 
     }
     fpeak_pos[ch]=ftime[ch][fpeak_idx[ch]];
-    if (gverb&(2|8)) 
+    if (gverb&(2|8|0x100)) 
       printf("\nch%i, max %.3f @ %i/%.3f\n",ch,fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
   }
   
@@ -350,31 +390,8 @@ Int_t drs4root::Next_event()
     
 #ifdef FILTERING
     // use the first channel of first event to build the matching filter
-    double mf_max; 
-    if (fevcount==1 && mf_shape) 
-    {
-      double xx[kMaxFilterLength];
-      for(ii=0;ii<kMaxFilterLength;ii++) xx[ii] = double(ii)*kCellWidth;
-
-      //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-      mf_size=mfilter_create(ftime[ch],waveform[0],kLCh,kCellWidth,mf_shape,mf_size,&mfilter_coeff,&mfilter_x);
-      //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-      if(mf_size)
-      {
-        mfi_set(xx,mfilter_coeff,mf_size);
-        printf("MFilter of type %i[%i] created:\n",mf_shape,mf_size);
-        double l2=0.;
-        for(ii=0;ii<mf_size;ii++) 
-        {
-          printf("%i:fx=%f,fy%f\n",ii,mfilter_x[ii],mfilter_coeff[ii]);
-          l2 += mfilter_coeff[ii]*mfilter_coeff[ii];
-        }
-        mf_max=0.; 
-        mf_idx_max=0;
-        for(ii=0;ii<mf_size;ii++) if(mfilter_coeff[ii]>mf_max) {mf_max=mfilter_coeff[ii]; mf_idx_max=ii;}
-        printf("MFilter max=%f @ %i. L2=%f\n",mf_max,mf_idx_max,l2);
-      }
-    }
+    if (fevcount==1 && mf_shape==kFShape_1st_event)                   
+      Set_shape(ftime[0],waveform[0],kLCh);
     
     // FIR filtering
     //printf("mf_size=%i\n",mf_size);
@@ -450,4 +467,11 @@ void drs4root::Print_event()
     }
     cout<<endl;
   }
+}
+void drs4root::Loop(Int_t nn)
+{
+  fevcount = 0;
+  Int_t ii;
+  for(ii=0;ii<nn;ii++) if(Next_event()) break;
+  return;
 }
