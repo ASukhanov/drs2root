@@ -1,3 +1,5 @@
+// Version v2 2016-04-30. FILTERING disabled by default. Tested at FNAL.
+
 //#include <stdlib.h> // for exit()
 #include <TROOT.h>
 #include <TSystem.h>
@@ -23,6 +25,7 @@ int drs4root::gverb = 0;
 double drs4root::invert[kNCh] = {1.,1.};
 int drs4root::ghist = 0;
 double drs4root::gthreshold_relative = 0.;
+
 #ifdef FILTERING
 #include "mfilter.h"
 int drs4root::mf_shape=0;
@@ -69,6 +72,7 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   const Char_t *tname;
     struct stat statv;
     Char_t      oname[256];
+    TFile *ffile = 0;
 
   if(strlen(in)==0) return;
   if((tname = gSystem->ExpandPathName(in))!=0) strcpy(fname,tname);
@@ -235,6 +239,7 @@ void drs4root::EventMinMax()
   }
 }
 //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+#ifdef  FILTERING
 //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 void drs4root::Set_shape(Double_t *xx, Double_t *yy, Int_t size)
 {
@@ -272,6 +277,7 @@ void drs4root::Set_shape(Double_t *xx, Double_t *yy, Int_t size)
   else printf("Failed to create mfilter\n");
 }
 //,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+#endif
 //'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 Int_t drs4root::Next_event()
 {

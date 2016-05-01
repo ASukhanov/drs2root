@@ -1,3 +1,5 @@
+// Version v2 2016-04-30. FILTERING disabled
+
 #ifndef drs4root_h
 #define drs4root_h
 
@@ -8,16 +10,16 @@
 #include <TTree.h>
 #include <TGraph.h>
 
-#define FILTERING
+//#define FILTERING
 
-#define FAST_CALIBRATION
+//#define FAST_CALIBRATION
 
 enum
 {
 #ifdef FILTERING
   kMaxFilterLength = 100,
 #endif
-  kNCh = 2, //number of channels recorded in the file
+  kNCh = 3, //number of channels recorded in the file
   kLCh = 1024,
   kMax = 65536, // max amplitude
   kMin = 0
@@ -85,7 +87,9 @@ public:
   static int regularize;
   static int gverb;
   static int ghist;
+#ifdef FILTERING
   static int gfilter_roi_length;
+#endif
   static double gthreshold_relative;
 
   struct Event_t fEv;
@@ -134,8 +138,10 @@ public:
   void Print_event();
   TProfile *GetProfile(Int_t ch) {return fprofile[ch];}
   TH2S *GetHistRaw(Int_t ch) {return fhch[ch];}
+#ifdef  FILTERING
   TH2S *GetHistFiltered(Int_t ch) {return fhchMF[ch];}
   void SetFilter(Int_t shape=0, Int_t ntaps=10) {mf_shape = shape; mf_size = ntaps;}
+#endif
   void Loop(Int_t nEvents=999999999);
   ClassDef(drs4root,0)
 };

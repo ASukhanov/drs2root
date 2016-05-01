@@ -1,7 +1,7 @@
 # Author: A. Sukhanov, 09/30/2015
 include Makefile.arch
 #------------------------------------------------------------------------------
-dqO         = drs4root.$(ObjSuf) drs4rootDict.$(ObjSuf) mfilter.$(ObjSuf)
+dqO         = drs4root.$(ObjSuf) drs4rootDict.$(ObjSuf)
 dqS         = drs4root.$(SrcSuf) drs4rootDict.$(SrcSuf)
 dqSO        = drs4root.$(DllSuf)
 
@@ -14,7 +14,7 @@ all:            $(PROGRAMS)
 
 drs4root:           $(dqSO)
 $(dqSO):       $(dqO)
-		$(LD) $(SOFLAGS) $(LDFLAGS) $^ $(EXPLLINKLIBS) -lgsl -lgslcblas $(OutPutOpt)$@
+		$(LD) $(SOFLAGS) $(LDFLAGS) $^ $(EXPLLINKLIBS) $(OutPutOpt)$@
 		@echo "$@ done"
 
 clean:
