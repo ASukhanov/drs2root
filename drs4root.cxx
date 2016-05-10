@@ -131,7 +131,12 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
       {printf("ERROR in Time Header\n"); return;}
   cout<<"Got fth["<<sizeof(fth)<<"]"<<endl;
   //cout<<strncpy(fth.stamp_time_Header<<",";
-  cout<<CO(fth.stamp_time_Header)<<",";
+  cout<<"Time header: "<<CO(fth.stamp_time_Header)<<",";
+  if(fth.stamp_time_Header[0] != 'T')
+  {
+    cout<<"\nERROR. File format wrong. Time header should be 'TIME'. Change drs4root.h accordingly and recompile\n";
+    return;
+  }
   cout<<CO(fth.stamp_board_number)<<fth.board_number;
   cout<<endl;
   for (ch=0; ch<kNCh; ch++)

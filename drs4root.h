@@ -1,4 +1,5 @@
 // Version v2 2016-04-30. FILTERING disabled
+// Version v3 2016-05-10. Reading files, written with drs-5.0.5
 
 #ifndef drs4root_h
 #define drs4root_h
@@ -10,6 +11,8 @@
 #include <TTree.h>
 #include <TGraph.h>
 
+#define FILEFORMAT_PRE505 //v2/ uncomment this for reading files written using software prior to 505
+
 //#define FILTERING
 
 //#define FAST_CALIBRATION
@@ -19,7 +22,7 @@ enum
 #ifdef FILTERING
   kMaxFilterLength = 100,
 #endif
-  kNCh = 3, //number of channels recorded in the file
+  kNCh = 2, //number of channels recorded in the file
   kLCh = 1024,
   kMax = 65536, // max amplitude
   kMin = 0
@@ -59,6 +62,9 @@ struct Channel_Time_t
 };
 struct Time_header_t
 {
+#ifndef FILEFORMAT_PRE505
+  char file_header[4]; //v2
+#endif
   char stamp_time_Header[4];
   char stamp_board_number[2];
   Short_t board_number;
