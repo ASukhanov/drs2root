@@ -11,7 +11,7 @@
 #include <TTree.h>
 #include <TGraph.h>
 
-#define FILEFORMAT_PRE505 //v2/ uncomment this for reading files written using software prior to 505
+//#define FILEFORMAT_PRE505 //v2/ uncomment this for reading files written using software prior to 505
 
 //#define FILTERING
 
@@ -48,6 +48,9 @@ struct Event_Header_t
 struct Ch_Amplitude_t
 {
   char stamp_ch_header[4];
+#ifndef FILEFORMAT_PRE505
+  UInt_t scl; //v2/ Scaler in Hz
+#endif
   UShort_t a[kLCh];
 };
 struct Event_t

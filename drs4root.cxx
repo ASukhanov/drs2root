@@ -89,6 +89,9 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   if(rc!=0) {perror("Cannot fstat"); fsize = -1;}
   fsize = statv.st_size;
   printf("File opened %s[%d]\n",fname,fsize);
+#ifdef FILEFORMAT_PRE505
+  printf("WARNING! unpacking assuming file format written with software version prior 5.0.5\n");
+#endif
 
   // output file
   strcpy(oname,fname);
@@ -134,7 +137,7 @@ drs4root::drs4root(const Char_t *in, const Char_t *out)
   cout<<"Time header: "<<CO(fth.stamp_time_Header)<<",";
   if(fth.stamp_time_Header[0] != 'T')
   {
-    cout<<"\nERROR. File format wrong. Time header should be 'TIME'. Change drs4root.h accordingly and recompile\n";
+    cout<<"\nERROR. File format wrong. Time header should be 'TIME'. Change FILEFORMAT_PRE505 in drs4root.h accordingly and recompile\n";
     return;
   }
   cout<<CO(fth.stamp_board_number)<<fth.board_number;
@@ -293,18 +296,23 @@ Int_t drs4root::Next_event()
     {return 1;}
   //EventMinMax();
   //return 0;  
-
+  if (gverb&(1)) printf("sn=%i evn=%i range=%i\n",fevcount,fEv.h.evnum,fEv.h.range);
   fevcount++;
   for(ch=0;ch<kNCh;ch++)
   {
-    if (gverb&(2|8)) printf("ch%i trig cell %i timecal=%f\n",ch,fEv.h.tno,fth.ch[ch].t[fEv.h.tno]);
+#ifdef FILEFORMAT_PRE505
+    if (gverb&(2)) printf("ch%i:%4.4s trig cell %i timecal=%f",ch,fEv.ch[ch].stamp_ch_header,fEv.h.tno,fth.ch[ch].t[fEv.h.tno]);
+#else
+    if (gverb&(2)) printf("ch%i:%4.4s trig cell %i timecal=%f, scaler=%i\n",ch,fEv.ch[ch].stamp_ch_header,fEv.h.tno,fth.ch[ch].t[fEv.h.tno],fEv.ch[ch].scl);
+#endif
     fpeak[ch] = 0.;
     for (ii=0 ; ii<1024 ; ii++) {
       // convert data to volts
       waveform[ch][ii] = (fEv.ch[ch].a[ii] / 65536. * (1.-2.*invert[ch]) + invert[ch] + fEv.h.range/1000.0 - 0.5);
+      //waveform[ch][ii] = fEv.ch[ch].a[ii]/65536.;
       if(waveform[ch][ii]>fpeak[ch]) 
       {  fpeak[ch]=waveform[ch][ii]; fpeak_idx[ch]=ii;}
-      if (gverb&2) printf("%i:%03i ",ii,int(waveform[ch][ii]*1000.));            
+      if (gverb&8) printf("%i:%03i ",ii,int(waveform[ch][ii]*1000.));            
       // calculate time for this cell
   #ifdef FAST_CALIBRATION
       ftime[ch][ii] = fth.ch[ch].t[(ii+fEv.h.tno) % 1024] 
@@ -319,7 +327,7 @@ Int_t drs4root::Next_event()
     }
     fpeak_pos[ch]=ftime[ch][fpeak_idx[ch]];
     if (gverb&(2|8|0x100)) 
-      printf("\nch%i, max %.3f @ %i/%.3f\n",ch,fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
+      printf("ch%i, max %.3f @ %i/%.3f\n",ch,fpeak[ch],fpeak_idx[ch],fpeak_pos[ch]);
   }
   
   // align cell #0 of all channels
